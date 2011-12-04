@@ -19,6 +19,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 
 /* Prototypes */
 static int parse_proc_file (const char *);
@@ -48,26 +49,31 @@ static const char * pretty_sockaddr_ipv6 (struct sockaddr_in6 *, char *);
 
 int debug = 0;
 
-uint32_t threshold = 0;
+uint32_t threshold = 1;
 
 int
 main ()
 {
   const char *procfiles[] = {"/proc/net/udp",
-			    "/proc/net/udp6",
-			    "/proc/net/tcp",
-			    "/proc/net/tcp6",
-			    0};
+			     "/proc/net/udp6",
+			     "/proc/net/tcp",
+			     "/proc/net/tcp6",
+			     0};
   const char **procfile;
+  unsigned iter;
+#define NITER 1000
 
-  for (procfile = &procfiles[0];
-       *procfile != 0;
-       ++procfile)
+  for (iter = 0; iter < NITER; ++iter)
     {
-      if (parse_proc_file (*procfile) != 0)
+      for (procfile = &procfiles[0];
+	   *procfile != 0;
+	   ++procfile)
 	{
-	  fprintf (stderr, "Error parsing %s\n", *procfile);
-	  exit (42);
+	  if (parse_proc_file (*procfile) != 0)
+	    {
+	      fprintf (stderr, "Error parsing %s\n", *procfile);
+	      exit (42);
+	    }
 	}
     }
   return 0;
@@ -270,11 +276,15 @@ convert_sockaddr_in (as, ae, port, ap)
   memset (ap, 0, sizeof (struct sockaddr_in));
   ap->sin_family = AF_INET;
   ap->sin_port = htons (port);
-  ap->sin_addr.s_addr = strtoul (as, &endp, 16);
-#if 0
-  fprintf (stderr, "IPv4 address: %*.*s\n",
-	   (int) (ae-as), (int) (ae-as), as);
-#endif /* 0 */
+  ap->sin_addr.s_addr = strtoul (as, (char **) &endp, 16);
+  if (endp != ae)
+    {
+      fprintf (stderr, "Unexpected: %08lx %08lx %08lx\n",
+	       (unsigned long) as,
+	       (unsigned long) ae,
+	       (unsigned long) endp);
+      return -1;
+    }
   return 0;
  
 }
@@ -286,11 +296,21 @@ convert_sockaddr_in6 (as, ae, port, ap)
      uint16_t port;
      struct sockaddr_in6 *ap;
 {
+  unsigned k;
+  char buf[33];
+
   memset (ap, 0, sizeof (struct sockaddr_in6));
   ap->sin6_family = AF_INET6;
   ap->sin6_port = htons (port);
-  fprintf (stderr, "IPv6 address: %*.*s\n",
-	   (int) (ae-as), (int) (ae-as), as);
+
+#define BYTES_PER_CHUNK 4
+#define CHUNKS_PER_ADDR 4
+  for (k = 0; k < CHUNKS_PER_ADDR; ++k)
+    {
+      memset (buf, 0, BYTES_PER_CHUNK * 2 + 1);
+      memcpy (buf, as + (k * BYTES_PER_CHUNK * 2), BYTES_PER_CHUNK * 2);
+      ap->sin6_addr.s6_addr32[k] = strtoul (buf, 0, 16);
+    }
   return 0;
  
 }
@@ -416,7 +436,9 @@ skip_spaces (cpp, end)
   return 0;
 }
 
-#define MAX_PRETTY_SOCKADDR INET6_ADDRSTRLEN
+#define MAX_SERVNAME 20
+
+#define MAX_PRETTY_SOCKADDR (INET6_ADDRSTRLEN + MAX_SERVNAME + 3)
 
 static const char *
 pretty_sockaddr (struct sockaddr *sa)
@@ -441,19 +463,49 @@ pretty_sockaddr (struct sockaddr *sa)
 static const char *
 pretty_sockaddr_ipv4 (struct sockaddr_in *sa, char *buf)
 {
-  if (inet_ntop (AF_INET, sa, buf, sizeof (struct sockaddr_in)) == 0)
+  char servname[MAX_SERVNAME];
+  int result;
+
+  result = getnameinfo ((struct sockaddr *) sa, sizeof (struct sockaddr_in),
+			buf, MAX_PRETTY_SOCKADDR,
+			servname, MAX_SERVNAME,
+			NI_NUMERICHOST|NI_NUMERICSERV);
+  if (result == 0)
     {
+      char *cp = buf + strlen (buf);
+      sprintf (cp, ":%s", servname);
+      return buf;
+    }
+  else
+    {
+      fprintf (stderr, "Error pretty-printing IPv6 address: %s\n",
+	       gai_strerror (result));
       return 0;
     }
-  return buf;
 }
 
 static const char *
 pretty_sockaddr_ipv6 (struct sockaddr_in6 *sa, char *buf)
 {
-  if (inet_ntop (AF_INET6, sa, buf, sizeof (struct sockaddr_in6)) == 0)
+  char servname[MAX_SERVNAME];
+  int result;
+
+  buf[0] = '[';
+  result = getnameinfo ((struct sockaddr *) sa, sizeof (struct sockaddr_in6),
+			buf+1, MAX_PRETTY_SOCKADDR-1,
+			servname, MAX_SERVNAME,
+			NI_NUMERICHOST|NI_NUMERICSERV);
+  if (result == 0)
     {
+      char *cp = buf + strlen (buf);
+      sprintf (cp, "]:%s", servname);
+      return buf;
+    }
+  else
+    {
+      fprintf (stderr, "Error pretty-printing IPv6 address: %s\n",
+	       gai_strerror (result));
+      fprintf (stderr, "  AF = %d\n", (int) sa->sin6_family);
       return 0;
     }
-  return buf;
 }
