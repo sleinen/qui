@@ -55,19 +55,28 @@ per_entry (pfe, tv, closure)
      void *closure;
 {
   Preferences p = (Preferences) closure;
-  if (pfe->iq >= p->threshold || pfe->oq >= p->threshold)
+  if ((p->want_input && (pfe->iq >= p->threshold))
+      || (p->want_output && (pfe->oq >= p->threshold)))
     {
       char lap[MAX_PRETTY_SOCKADDR];
       char rap[MAX_PRETTY_SOCKADDR];
       pretty_sockaddr ((struct sockaddr *) &(pfe->la), lap);
       pretty_sockaddr ((struct sockaddr *) &(pfe->ra), rap);
-      fprintf (stdout, "%s %s %s Q: %lu %lu\n",
+      fprintf (stdout, "%s %s %s Q:",
 	       strtime (tv, p),
-	       lap, rap,
-	       (unsigned long) pfe->iq,
-	       (unsigned long) pfe->oq);
+	       lap, rap);
+      if (p->want_input)
+	{
+	  fprintf (stdout, " %lu", (unsigned long) pfe->iq);
+	}
+      if (p->want_output)
+	{
+	  fprintf (stdout, " %lu", (unsigned long) pfe->oq);
+	}
+      fputc ('\n', stdout);
     }
 }
+
 static const char *
 pretty_sockaddr (struct sockaddr *sa, char *buf)
 {

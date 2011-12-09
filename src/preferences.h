@@ -12,12 +12,14 @@ typedef struct PreferencesRec *Preferences;
 
 typedef struct PreferencesRec
 {
-  int specific_port;
-  uint16_t portno;
   int want_tcp;
   int want_udp;
   int want_ipv4;
   int want_ipv6;
+  int specific_port;
+  uint16_t portno;
+  int want_input;
+  int want_output;
   unsigned rounds;
   int print_usecs;
   unsigned threshold;

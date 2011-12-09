@@ -60,6 +60,16 @@ parse_args (argc, argv, p)
       0,
       'p',
     },
+    { "input",
+      no_argument,
+      0,
+      'i',
+    },
+    { "output",
+      no_argument,
+      0,
+      'o',
+    },
     { .name = "microseconds",
       .has_arg = no_argument,
       0,
@@ -86,13 +96,15 @@ parse_args (argc, argv, p)
   char *end;
 
   init_prefs (p);
-  while ((opt = getopt_long (argc, argv, "t:r:TU46p:mcdh", opts, 0)) != -1)
+  while ((opt = getopt_long (argc, argv, "t:r:TU46p:iomcdh", opts, 0)) != -1)
     {
       switch (opt) {
       case 'T': p->want_tcp = 1; break;
       case 'U': p->want_udp = 1; break;
       case '4': p->want_ipv4 = 1; break;
       case '6': p->want_ipv6 = 1; break;
+      case 'i': p->want_input = 1; break;
+      case 'o': p->want_output = 1; break;
       case 'm': p->print_usecs = 1; break;
       case 'c': p->close_proc_after_reading = 1; break;
       case 'd': p->debug = 1; break;
@@ -147,17 +159,23 @@ parse_args (argc, argv, p)
     {
       p->want_ipv4 = p->want_ipv6 = 1;
     }
+  if (!p->want_input && !p->want_output)
+    {
+      p->want_input = p->want_output = 1;
+    }
 }
 
 static void
 init_prefs (p)
      Preferences p;
 {
-  p->specific_port = 0;
   p->want_tcp = 0;
   p->want_udp = 0;
   p->want_ipv4 = 0;
   p->want_ipv6 = 0;
+  p->want_input = 0;
+  p->want_output = 0;
+  p->specific_port = 0;
   p->rounds = 1;
   p->print_usecs = 0;
   p->threshold = 1;
@@ -171,6 +189,7 @@ usage (progname)
 {
   fprintf (stderr, "Usage: %s [--threshold BYTES] [--rounds ROUNDS]\n"
 	   "\t  [--tcp|-T] [--udp|-U] [--ipv4|-4] [--ipv6|-6]\n"
+	   "\t  [--input|-i] [--output|-o]\n"
 	   "\t  [--port PORT|-p PORT] [--microseconds|-m]\n"
 	   "\t  [--debug|-d] [--help|-h]\n",
 	   progname);
