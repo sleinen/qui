@@ -17,6 +17,7 @@
 static int convert_unsigned (const char *, unsigned *, const char *);
 static int convert_u16 (const char *, uint16_t *, const char *);
 static void init_prefs (Preferences);
+static void init_timespec (struct timespec *, double);
 static void usage (const char *);
 
 void
@@ -73,9 +74,7 @@ parse_args (argc, argv, p)
 	  }
 	else
 	  {
-	    p->sleeptime.tv_sec = double_arg / 1000;
-	    p->sleeptime.tv_nsec =
-	      (double_arg - (p->sleeptime.tv_sec * 1000)) * 1000000;
+	    init_timespec (&p->sleeptime, double_arg);
 	  }
 	break;
       case 'b':
@@ -174,9 +173,18 @@ init_prefs (p)
   p->print_usecs = 0;
   p->threshold = default_threshold;
   p->blipsize = default_blipsize;
-  p->sleeptime = default_sleep;
+  init_timespec (&p->sleeptime, (double) default_sleep);
   p->close_proc_after_reading = 0;
   p->debug = 0;
+}
+
+static void
+init_timespec (tsp, val)
+  struct timespec *tsp;
+  double val;
+{
+  tsp->tv_sec = val / 1000;
+  tsp->tv_nsec = (val - (tsp->tv_sec * 1000)) * 1000000;
 }
 
 static void
