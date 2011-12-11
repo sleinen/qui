@@ -8,78 +8,89 @@
 ### If the input queue level is greater than some threshold, the tool
 ### will output a line showing the queue occupancy.
 
+use strict;
+use warnings;
 use Time::HiRes qw(usleep gettimeofday);
 use POSIX qw(strftime);
+use FileHandle;
 use Getopt::Long;
 
+my $stop = 0;
+my %opt = ( threshold => 2000,
+	    blipsize => 50000,
+	    sleep => 10000,
+	  );
+my $prefix = '/proc/net';
+my @protos = qw/udp udp6 tcp tcp6/;
+my (%FH, %stats, $pattern);
+my @trackers;
+
 sub monitor_queue($ );
+sub blip($$);
 
-my $socket_id = 42532440;
+die "Usage: $0 [-t threshold] [-b blip_size] [-s sleep_time] [socket ...]\n"
+  unless GetOptions(\%opt, 'threshold=i', 'blipsize=i', 'sleep=i');
+if (@ARGV) {
+  $pattern = "(".join('|',@ARGV).")";
+} else {
+  $pattern = '(\d+)';
+}
+for my $proto (@protos) {
+  $FH{$proto} = new FileHandle;
+  $FH{$proto}->open("<$prefix/$proto") or
+    die "Can't open $prefix/$proto: $!";
+  while($_ = $FH{$proto}->getline()) {
+    next unless /^\s*\d+:/;
+    my ($s) = ((split)[9] =~ /$pattern/);
+    if (defined $s) {
+      print STDERR "Tracking socket $s in $prefix/$proto\n";
+      %{$stats{$s}} = ( avg => 0,
+			max => 0,
+			samples => 0,
+		      );
+      push(@trackers,
+	   sub() {
+	     seek($FH{$proto}, 0, 0) or die "Can't seek: $!";
+	     while ($_ = $FH{$proto}->getline()) {
+	       next unless (my @words = split)[9] eq $s;
+	       blip($s, hex((split(':',$words[4]))[1]));
+	       last;
+	     }
+	   });
+    }
+  }
+}
 
-my $threshold = 2000;
+sub blip($$ ) {
+  my ($s ,$inq) = @_;
 
-my $blipsize = 50000;
+  my $blips = $inq / $opt{blipsize};
+  my ($fullblips, $halfblips) = ($blips / 2, $blips % 2);
+  my ($sec, $usec) = gettimeofday();
+  printf STDOUT ("%s.%06d %10d %9d %s%s\n",
+		 strftime("%H:%M:%S", localtime($sec)),
+		 $usec,
+		 $s,
+		 $inq,
+		 "X" x $fullblips, ($halfblips ? 'x' : ''))
+    if $inq >= $opt{threshold};
+  $stats{$s}{avg} = ($stats{$s}{samples}*$stats{$s}{avg} +
+		     $inq)/(++$stats{$s}{samples});
+  $stats{$s}{max} = $inq if $inq > $stats{$s}{max};
+}
 
-my $all_p = 0;
-
-die "Usage: $0 [-s socket_id] [-t threshold]\n"
-    unless GetOptions("all", \$all_p,
-		      "socket=i", \$socket_id,
-		      "threshold=i", \$threshold,
-    );
-
-monitor_queue($socket_id);
+$SIG{INT} = sub() { $stop = 1; };
+until($stop) {
+  foreach my $tracker (@trackers) {
+    &{$tracker}();
+  }
+  usleep($opt{sleep});
+}
+for my $fh (keys(%FH)) {
+  $FH{$fh}->close or die "Can't close file: $!";
+}
+print STDERR "\nAverage/Maximum queue size per socket\n";
+foreach my $s (sort {$a <=> $b} keys(%stats)) {
+  printf STDERR ("%08d %d/%d\n",$s, $stats{$s}{avg},$stats{$s}{max});
+}
 1;
-
-sub monitor_queue($ ) {
-    my ($socket_id) = @_;
-
-    while (1) {
-	if (!get_queues($socket_id, $all_p,
-			sub () {
-			    my ($s, $inq) = @_;
-			    if (defined $inq) {
-				my $blips = $inq / $blipsize;
-				my ($fullblips, $halfblips) = ($blips / 2, $blips % 2);
-				my ($sec, $usec) = gettimeofday();
-				printf STDOUT ("%s.%06d %10d %9d %s%s\n",
-					       strftime("%H:%M:%S", localtime($sec)),
-					       $usec,
-					       $s,
-					       $inq,
-					       "X" x $fullblips, ($halfblips ? 'x' : ''))
-				    if $inq >= $threshold;
-			    }
-			})) {
-	    warn "Socket not found";
-	    return undef;
-	}
-	usleep(10000);
-    }
-}
-
-sub get_queues($$$ ) {
-    my ($socket_id, $all_p, $closure) = @_;
-    my $count = 0;
-    my @procfiles = qw(/proc/net/udp /proc/net/udp6 /proc/net/tcp /proc/net/tcp6);
-    $socket_id = '\S+' if $all_p;
-
-    foreach my $procfile (@procfiles) {
-	open UDP, $procfile or die;
-	while (<UDP>) {
-	    my ($inq, $s);
-	    if ($all_p) {
-		($inq, $s) = /^\s*\d+:\s*\S+\s+\S+\s+\S+\s+\S+:(\S+)\s+\S+\s+\S+\s+\S+\s+\S+\s+(\S+)/;
-	    } else {
-		($inq, $s) = /^\s*\d+:\s*\S+\s+\S+\s+\d+\s+\S+:(\S+)\s+\S+\s+\S+\s+\S+\s+\S+\s+($socket_id)/;
-	    }
-	    if (defined $inq) {
-		++$count;
-		$inq = hex($inq);
-		&{$closure} ($s, $inq);
-	    }
-	}
-	close UDP or die "Error closing $procfile: $!";
-    }
-    return $count;
-}
