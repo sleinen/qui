@@ -60,8 +60,9 @@ insert_sample (h, tv, val)
      uint32_t val;
 {
   BufferSample s;
+  unsigned insert_pointer = h->last_sample;
 
-  h->last_sample = h->last_sample + 1;
+  h->last_sample = insert_pointer + 1;
   if (h->last_sample == h->n_samples)
     {
       h->last_sample = 0;
@@ -70,8 +71,57 @@ insert_sample (h, tv, val)
     {
       h->first_sample = (h->first_sample + 1 % h->n_samples);
     }
-  s = &(h->samples[h->last_sample]);
+  s = &(h->samples[insert_pointer]);
   s->ts = *tv;
   s->occ = val;
+  return 0;
+}
+
+int
+consume_active_samples (h, mapfn, closure)
+     BufferHistory h;
+     int (* mapfn) (BufferHistory, unsigned, void *);
+     void * closure;
+{
+  return map_active_samples_1 (h, mapfn, closure, h->first_sample, h->last_sample, 1);
+}
+
+int
+map_active_samples (h, mapfn, closure)
+     BufferHistory h;
+     int (* mapfn) (BufferHistory, unsigned, void *);
+     void * closure;
+{
+  return map_active_samples_1 (h, mapfn, closure, h->first_sample, h->last_sample, 0);
+}
+
+int
+map_active_samples_1 (h, mapfn, closure, start, end, consume_p)
+     BufferHistory h;
+     int (* mapfn) (BufferHistory, unsigned, void *);
+     void * closure;
+     unsigned start, end;
+     int consume_p;
+{
+  unsigned k;
+  int result;
+
+  for (k = start;
+       k < end;
+       k = ((k + 1) == h->n_samples) ? 0 : k + 1)
+    {
+      result = (* mapfn) (h, k, closure);
+      if (result == -1)
+	{
+	  break;
+	}
+      else
+	{
+	  if (consume_p)
+	    {
+	      h->first_sample = ((k + 1) == h->n_samples) ? 0 : k + 1;
+	    }
+	}
+    }
   return 0;
 }

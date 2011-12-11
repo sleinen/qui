@@ -1,2 +1,18 @@
 The `qui' program can be used to observe the use (occupancy) of a
 system's queues in real time.
+
+The basic idea is this:
+
+The program will run in an endless loop, looking at the state of the
+queues of the sockets you are interested at a high frequency,
+typically many times per second.  When a queue is seen that exceeds a
+(user-specified) threshold, the socket is listed along with the
+momentary queue occupancy.
+
+The original version was written in Perl and can be found in `qui.pl'.
+
+A newer version, written in C, is under development.
+
+Both versions use the /proc/net/{udp,udp6,tcp,tcp6} interface to get
+queue sizes.  This is only available under Linux, so the tool cannot
+work on other systems.

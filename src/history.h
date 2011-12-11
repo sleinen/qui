@@ -43,6 +43,9 @@ typedef struct BufferHistoryRec {
 
 extern BufferHistory make_buffer_history (unsigned, unsigned);
 extern int destroy_buffer_history (BufferHistory);
-int insert_sample (BufferHistory, struct timeval *, uint32_t);
+extern int insert_sample (BufferHistory, struct timeval *, uint32_t);
+extern int consume_active_samples (BufferHistory, int (*) (BufferHistory, unsigned, void *), void *);
+extern int map_active_samples (BufferHistory, int (*) (BufferHistory, unsigned, void *), void *);
+extern int map_active_samples_1 (BufferHistory, int (*) (BufferHistory, unsigned, void *), void *, unsigned, unsigned, int);
 
 #endif /* not __QUI_HISTORY_H__ */
