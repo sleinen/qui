@@ -1,0 +1,1 @@
+Tool to observe the occupancy of network queues in the system on short timescales, i.e. many times per second.  This can be used to detect brief bursts and see how large they get.  Currently only supports Linux through the /proc/net/{tc,ud}p{,6} interface.
