@@ -54,7 +54,7 @@ static int parse_hex_u16 (const char **, const char *, uint16_t *);
 static int skip_colon (const char **, const char *);
 static int skip_spaces (const char **, const char *);
 
-#define BUFSIZE 4096
+#define BUFSIZE 65536
 
 typedef struct ProcFileRec
 {
@@ -195,15 +195,25 @@ parse_proc_file (procfile, p, callback, closure)
     }
   {
     const char *cp = buf;
+    char *read_pointer = buf;
     const char *lim, *tokstart, *linestart;
+    size_t total_len = 0;
 
-    len = read (fd, buf, BUFSIZE);
-    if (len <= 0)
+    while ((BUFSIZE > total_len)
+	   && ((len = read (fd, read_pointer, BUFSIZE - total_len)) > 0)) {
+      total_len += len;
+      read_pointer += len;
+    }
+
+    if (len < 0 || total_len == 0)
       {
 	fprintf (stderr, "Error reading from %s: %s\n",
 		 procfile->pathname, strerror (errno));
 	return -1;
       }
+
+    len = total_len;
+
     lim = buf + len;
 
     /* Parse header line */
@@ -216,7 +226,7 @@ parse_proc_file (procfile, p, callback, closure)
 	  ++cp;
 	if (p->debug)
 	  {
-	    fprintf (stderr, "%2d: %*.*s\n", 
+	    fprintf (stderr, "%2d: %*.*s\n",
 		     (int) (tokstart-linestart),
 		     (int) (cp-tokstart), (int) (cp-tokstart), tokstart);
 	  }
@@ -346,7 +356,7 @@ parse_proc_line (start, end, tv, p, callback, closure)
   if (parse_hex_u32 (&cp, end, &(pfe.iq)) == -1)
     return -1;
   (* callback) (&pfe, tv, closure);
-  
+
   return 0;
 }
 
@@ -373,7 +383,7 @@ parse_sockaddr (cpp, end, ap)
       fprintf (stderr, "Unknown address length %d\n",
 	       (int) (ae-as));
       return -1;
-    }  
+    }
 }
 
 static int
@@ -398,7 +408,6 @@ convert_sockaddr_in (as, ae, port, ap)
       return -1;
     }
   return 0;
- 
 }
 
 static int
@@ -430,7 +439,6 @@ convert_sockaddr_in6 (as, ae, port, ap)
       ap->sin6_addr.s6_addr32[k] = strtoul (buf, 0, 16);
     }
   return 0;
- 
 }
 
 static int
