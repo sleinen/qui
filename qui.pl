@@ -35,15 +35,20 @@ if (@ARGV) {
 } else {
   $pattern = '(\d+)';
 }
+
+my %track_count;
+my $track_count_total = 0;
+
 for my $proto (@protos) {
   $FH{$proto} = new FileHandle;
   $FH{$proto}->open("<$prefix/$proto") or
     die "Can't open $prefix/$proto: $!";
+  $track_count{$proto} = 0;
   while($_ = $FH{$proto}->getline()) {
     next unless /^\s*\d+:/;
     my ($s) = ((split)[9] =~ /$pattern/);
     if (defined $s) {
-      print STDERR "Tracking socket $s in $prefix/$proto\n";
+      ++$track_count{$proto}, ++$track_count_total;
       %{$stats{$s}} = ( avg => 0,
 			max => 0,
 			samples => 0,
@@ -60,6 +65,7 @@ for my $proto (@protos) {
     }
   }
 }
+printf STDERR "Tracking %d sockets\n", $track_count_total;
 
 sub blip($$ ) {
   my ($s ,$inq) = @_;
