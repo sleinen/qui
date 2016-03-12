@@ -91,6 +91,7 @@ for my $fh (keys(%FH)) {
 }
 print STDERR "\nAverage/Maximum queue size per socket\n";
 foreach my $s (sort {$a <=> $b} keys(%stats)) {
-  printf STDERR ("%08d %d/%d\n",$s, $stats{$s}{avg},$stats{$s}{max});
+  printf STDERR ("%08d %8d %8d\n",$s, $stats{$s}{avg},$stats{$s}{max})
+      if $stats{$s}{max} >= $opt{threshold};
 }
 1;
